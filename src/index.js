@@ -2,9 +2,18 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const scene = new THREE.Scene()
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+)
+camera.position.set(10, 2.74, 20)
 
-const renderer = new THREE.WebGL1Renderer()
+const renderer = new THREE.WebGL1Renderer({
+    alpha: true,
+    antialias: true
+})
 renderer.shadowMap.enabled = true
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
@@ -61,7 +70,7 @@ class Box extends THREE.Mesh {
     update(ground) {
         this.updateSides()
         if (this.zAcceleration) {
-            this.velocity.z += 0.0003
+            this.velocity.z += 0.0002
         }
         this.position.x += this.velocity.x
         this.position.z += this.velocity.z
@@ -75,7 +84,8 @@ class Box extends THREE.Mesh {
             box1: this,
             box2: ground
         })) {
-            this.velocity.y *= 0.8
+            const friction = 0.4
+            this.velocity.y *= friction
             this.velocity.y = -this.velocity.y
         }
         else {
@@ -105,9 +115,9 @@ player.castShadow = true
 scene.add(player)
 
 const ground = new Box({
-    width: 5,
+    width: 20,
     height: 0.5,
-    depth: 10,
+    depth: 50,
     color: 'yellow',
     position: {
         x: 0,
@@ -120,11 +130,13 @@ scene.add(ground)
 
 const light = new THREE.DirectionalLight(0xffffff, 1)
 light.position.y = 3
-light.position.z = 2
+light.position.z = 1
 light.castShadow = true
 scene.add(light)
 
-camera.position.z = 5
+scene.add(new THREE.AmbientLight(0xffffff, 0.5))
+
+camera.position.z = 10
 
 console.log(ground.top)
 console.log(player.bottom)
@@ -158,8 +170,11 @@ window.addEventListener('keydown', (event) => {
         case 'KeyW':
             keys.w.pressed = true
             break
+        case 'Space':
+            player.velocity.y = 0.08
+            break
     }
-})
+}) 
 
 window.addEventListener('keyup', (event) => {
     switch (event.code) {
@@ -178,29 +193,10 @@ window.addEventListener('keyup', (event) => {
     }
 })
 
-const water = new Box({
-    width: 1,
-    height: 1,
-    depth: 1,
-    velocity: {
-        x: 0,
-        y: 0,
-        z: 0.005
-    },
-    position: {
-        x: 0,
-        y: 0,
-        z: -4
-    },
-    color: 'blue',
-    zAcceleration: true
-})
-water.castShadow = true
-scene.add(water)
-
-const waters = [water]
+const waters = []
 
 let frames = 0
+let spawnRate = 400
 function animate() {
     const animationId = requestAnimationFrame(animate)
     renderer.render(scene, camera)
@@ -208,14 +204,14 @@ function animate() {
     player.velocity.x = 0
     player.velocity.z = 0
     if (keys.a.pressed) {
-        player.velocity.x = -0.01
+        player.velocity.x = -0.02
     } else if (keys.d.pressed) {
-        player.velocity.x = 0.01
+        player.velocity.x = 0.02
     }
     if (keys.w.pressed) {
-        player.velocity.z = -0.01
+        player.velocity.z = -0.02
     } else if (keys.s.pressed) {
-        player.velocity.z = 0.01
+        player.velocity.z = 0.02
     }
 
     player.update(ground)
@@ -228,6 +224,32 @@ function animate() {
             cancelAnimationFrame(animationId)
         }
     })
+
+    if (frames % spawnRate === 0) {
+        if (spawnRate > 20) {
+            spawnRate -= 20
+        }
+        const newWater = new Box({
+            width: 1,
+            height: 1,
+            depth: 1,
+            velocity: {
+                x: 0,
+                y: 0,
+                z: 0.005
+            },
+            position: {
+                x: (Math.random() - 0.5) * 20,
+                y: 0,
+                z: -20
+            },
+            color: 'blue',
+            zAcceleration: true
+        })
+        newWater.castShadow = true
+        scene.add(newWater)
+        waters.push(newWater)
+    }
     
     frames++
 }
