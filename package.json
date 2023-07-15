@@ -1,0 +1,24 @@
+{
+  "name": "graphic-motors-01",
+  "version": "1.0.0",
+  "description": "First pratical class",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack build",
+    "watch": "webpack --watch",
+    "serve": "webpack serve --open",
+    "serve:reload": "webpack build && webpack serve"
+  },
+  "author": "Hyan Batista",
+  "license": "ISC",
+  "dependencies": {
+    "copy-webpack-plugin": "^11.0.0",
+    "html-webpack-plugin": "^5.5.3",
+    "three": "^0.153.0",
+    "webpack": "^5.86.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "devDependencies": {
+    "webpack-dev-server": "^4.15.1"
+  }
+}
