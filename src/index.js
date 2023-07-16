@@ -8,7 +8,7 @@ const camera = new THREE.PerspectiveCamera(
     0.1,
     1000
 )
-camera.position.set(10, 2.74, 20)
+camera.position.set(1, 8, 40)
 
 const renderer = new THREE.WebGL1Renderer({
     alpha: true,
@@ -101,6 +101,10 @@ function boxCollision({ box1, box2 }) {
     return xCollision && yCollision && zCollision
 }
 
+function updateScoreElement(score, element) {
+    element.textContent = score
+}
+
 const player = new Box({
     width: 1,
     height: 1,
@@ -109,7 +113,8 @@ const player = new Box({
         x: 0,
         y: -0.01,
         z: 0
-    }
+    },
+    color: 'red'
 })
 player.castShadow = true
 scene.add(player)
@@ -193,10 +198,17 @@ window.addEventListener('keyup', (event) => {
     }
 })
 
+const snakes = []
 const waters = []
+
+const scoreElement = document.getElementById('score')
+const hydrationElement = document.getElementById('hydration')
 
 let frames = 0
 let spawnRate = 400
+let waterSpawnRate = 600
+let thirstRate = 350
+let hydration = 100
 function animate() {
     const animationId = requestAnimationFrame(animate)
     renderer.render(scene, camera)
@@ -204,32 +216,55 @@ function animate() {
     player.velocity.x = 0
     player.velocity.z = 0
     if (keys.a.pressed) {
-        player.velocity.x = -0.02
+        player.velocity.x = -0.04
     } else if (keys.d.pressed) {
-        player.velocity.x = 0.02
+        player.velocity.x = 0.04
     }
     if (keys.w.pressed) {
-        player.velocity.z = -0.02
+        player.velocity.z = -0.04
     } else if (keys.s.pressed) {
-        player.velocity.z = 0.02
+        player.velocity.z = 0.04
     }
 
     player.update(ground)
-    waters.forEach(water => {
-        water.update(ground)
+    snakes.forEach(snake => {
+        snake.update(ground)
         if (boxCollision({
             box1: player,
-            box2: water
+            box2: snake
         })) {
             cancelAnimationFrame(animationId)
         }
     })
 
+    if (frames % thirstRate === 0) {
+        hydration += -10
+        if (hydration <= 0) {
+            cancelAnimationFrame(animationId)
+        }
+    }
+
+    waters.forEach((water, index) => {
+        water.update(ground)
+        if (boxCollision({
+            box1: player,
+            box2: water
+        })) {
+            waters.splice(index, 1)
+            let newHydrationValue = hydration + 20
+            if (newHydrationValue > 100) {
+                newHydrationValue = 100
+            }
+            hydration = newHydrationValue
+            scene.remove(water)
+        }
+    })
+
     if (frames % spawnRate === 0) {
         if (spawnRate > 20) {
-            spawnRate -= 20
+            spawnRate -= 5
         }
-        const newWater = new Box({
+        const snake = new Box({
             width: 1,
             height: 1,
             depth: 1,
@@ -239,19 +274,47 @@ function animate() {
                 z: 0.005
             },
             position: {
-                x: (Math.random() - 0.5) * 20,
+                x: (Math.random() - 0.5) * 15,
+                y: 0,
+                z: -20
+            },
+            color: 'green',
+            zAcceleration: true
+        })
+        snake.castShadow = true
+        scene.add(snake)
+        snakes.push(snake)
+    }
+
+    if (frames % waterSpawnRate === 0) {
+
+        const water = new Box({
+            width: 1,
+            height: 1,
+            depth: 1,
+            velocity: {
+                x: 0,
+                y: 0,
+                z: 0.005
+            },
+            position: {
+                x: (Math.random() - 0.5) * 15,
                 y: 0,
                 z: -20
             },
             color: 'blue',
             zAcceleration: true
         })
-        newWater.castShadow = true
-        scene.add(newWater)
-        waters.push(newWater)
+        water.castShadow = true
+        scene.add(water)
+        waters.push(water)
     }
     
     frames++
+    if (frames % 20 === 0) {
+        updateScoreElement(frames, scoreElement)
+        updateScoreElement(hydration, hydrationElement)
+    }
 }
 
 animate()
