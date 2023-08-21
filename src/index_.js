@@ -1,8 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
-import * as CANNON from "cannon-es"
-import CannonDebugger from "cannon-es-debugger"
 
 let camera, scene, renderer;
 
@@ -12,10 +10,12 @@ let spawnRate = 400
 let waterSpawnRate = 600
 let thirstRate = 350
 let hydration = 100
+let timeStep = 1 / 60
 
 // Game variables
 let ground
 let player
+let waterThree
 const snakes = []
 const waters = []
 let keyboard = {}
@@ -100,84 +100,6 @@ class Box extends THREE.Mesh {
 }
 
 
-class Object3DBox extends THREE.Mesh {
-    constructor({
-        object,
-        width,
-        height,
-        depth,
-        color = '#00ff00',
-        velocity = {
-            x: 0,
-            y: 0,
-            z: 0
-        },
-        position = {
-            x: 0,
-            y: 0,
-            z: 0
-        },
-        zAcceleration = false
-    }) {
-        super(
-            new THREE.BoxGeometry(width, height, depth),
-            new THREE.MeshStandardMaterial({ color: color })
-        )
-        this.object = object
-        this.width = width
-        this.height = height
-        this.depth = depth
-        this.color = color
-        this.position.set(position.x, position.y, position.z)
-        this.bottom = this.position.y - this.height / 2
-        this.top = this.position.y + this.height / 2
-        this.right = this.position.x + this.width / 2
-        this.left = this.position.x - this.width / 2
-        this.front = this.position.z + this.depth / 2
-        this.back = this.position.z - this.depth / 2
-        this.velocity = velocity
-        this.gravity = -0.002
-        this.zAcceleration = zAcceleration
-    }
-
-    updateSides() {
-        this.right = this.position.x + this.width / 2
-        this.left = this.position.x - this.width / 2
-        this.bottom = this.position.y - this.height / 2
-        this.top = this.position.y + this.height / 2
-        this.front = this.position.z + this.depth / 2
-        this.back = this.position.z - this.depth / 2
-    }
-
-    update(ground) {
-        this.updateSides()
-        if (this.zAcceleration) {
-            this.velocity.z += 0.0002
-        }
-        this.object.position.copy(this.position)
-        this.position.x += this.velocity.x
-        this.position.z += this.velocity.z
-        this.applyGravity(ground)
-    }
-
-    applyGravity(ground) {
-        this.velocity.y += this.gravity
-
-        if (boxCollision({
-            box1: this,
-            box2: ground
-        })) {
-            const friction = 0.4
-            this.velocity.y *= friction
-            this.velocity.y = -this.velocity.y
-        }
-        else {
-            this.position.y += this.velocity.y
-        }
-    }
-}
-
-
 init()
 
 
@@ -188,10 +110,8 @@ async function init() {
         window.innerWidth / window.innerHeight,
         0.1,
         1000
-    );
-    camera.position.z = 10;
-    camera.position.y = 5;
-
+    )
+    camera.position.set(1, 8, 10)
 
     renderer = new THREE.WebGL1Renderer({
         alpha: true,
@@ -200,27 +120,26 @@ async function init() {
     renderer.shadowMap.enabled = true
     renderer.setSize(window.innerWidth, window.innerHeight)
 
-    const ambient = new THREE.HemisphereLight(0xffffbb, 0x080820);
-    scene.add(ambient);
-
-    const light = new THREE.DirectionalLight(0xFFFFFF, 1);
-    light.position.set(1, 10, 6);
-    scene.add(light);
+    const light = new THREE.DirectionalLight(0xffffff, 1)
+    light.position.y = 3
+    light.position.z = 1
+    light.castShadow = true
+    scene.add(light)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5))
 
     document.body.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
 
-    addBackground()
-
     addGround()
     addPlayer()
 
+    await addWater()
+
     addKeysListener()
 
-    await animate()
+    animate()
 }
-
 
 function boxCollision({ box1, box2 }) {
     const xCollision = box1.right >= box2.left && box1.left <= box2.right
@@ -228,7 +147,6 @@ function boxCollision({ box1, box2 }) {
     const zCollision = box1.front >= box2.back && box1.back <= box2.front
     return xCollision && yCollision && zCollision
 }
-
 
 function updateScoreElement(score, element) {
     element.textContent = score
@@ -251,7 +169,6 @@ function addPlayer() {
     scene.add(player)
 }
 
-
 function addGround() {
     ground = new Box({
         width: 20,
@@ -269,21 +186,12 @@ function addGround() {
 }
 
 
-async function createWater() {
+async function addWater() {
     const gltfLoader = new GLTFLoader();
-    const waterLoaded = await gltfLoader.loadAsync('assets/water_bottle.glb');
-    let waterThree = waterLoaded.scene.children[0];
-    waterThree.scale.set(6, 6, 6)
-    return waterThree
-}
-
-
-async function createCobra() {
-    const gltfLoader = new GLTFLoader();
-    const cobraLoaded = await gltfLoader.loadAsync('assets/scorpion.glb');
-    let cobraThree = cobraLoaded.scene.children[0];
-    cobraThree.scale.set(6, 6, 6)
-    return cobraThree
+    const waterLoaded = await gltfLoader.loadAsync('assets/car.glb');
+    waterThree = waterLoaded.scene.children[0];
+    console.log(typeof(waterLoaded))
+    scene.add(waterThree);
 }
 
 
@@ -316,11 +224,15 @@ function movePlayer() {
 }
 
 
-async function animate() {
+function animate() {
     const animationId = requestAnimationFrame(animate)
     renderer.render(scene, camera)
 
     movePlayer()
+
+    world.step(timeStep);
+
+    waterThree.position.copy(player.position);
 
     player.update(ground)
     snakes.forEach(snake => {
@@ -352,7 +264,7 @@ async function animate() {
                 newHydrationValue = 100
             }
             hydration = newHydrationValue
-            scene.remove(water.object)
+            scene.remove(water)
         }
     })
 
@@ -360,11 +272,7 @@ async function animate() {
         if (spawnRate > 20) {
             spawnRate -= 5
         }
-
-        let snake_object = await createCobra()
-
         const snake = new Box({
-            object: snake_object,
             width: 1,
             height: 1,
             depth: 1,
@@ -382,16 +290,13 @@ async function animate() {
             zAcceleration: true
         })
         snake.castShadow = true
-        scene.add(snake.object)
+        scene.add(snake)
         snakes.push(snake)
     }
 
     if (frames % waterSpawnRate === 0) {
 
-        let water_object3d = await createWater()
-
-        const water = new Object3DBox({
-            object: water_object3d,
+        const water = new Box({
             width: 1,
             height: 1,
             depth: 1,
@@ -409,7 +314,7 @@ async function animate() {
             zAcceleration: true
         })
         water.castShadow = true
-        scene.add(water.object)
+        scene.add(water)
         waters.push(water)
     }
 
@@ -418,23 +323,4 @@ async function animate() {
         updateScoreElement(frames, scoreElement)
         updateScoreElement(hydration, hydrationElement)
     }
-}
-
-
-async function addBackground() {
-    const gltfLoader = new GLTFLoader();
-
-    const mountainLoaded = await gltfLoader.loadAsync('assets/mountain.glb');
-    let mountainMesh = mountainLoaded.scene.children[0];
-    mountainMesh.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -Math.PI / 180 * 90);
-    mountainMesh.position.set(0, 60, -90);
-    mountainMesh.scale.set(0.008, 0.008, 0.008);
-    scene.add(mountainMesh);
-
-    const domeLoaded = await gltfLoader.loadAsync('assets/skydome.glb');
-    let domeMesh = domeLoaded.scene.children[0];
-    domeMesh.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -Math.PI / 180 * 90);
-    domeMesh.position.set(0, -40, 0);
-    domeMesh.scale.set(0.1, 0.1, 0.1);
-    scene.add(domeMesh);
 }
