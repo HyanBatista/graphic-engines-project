@@ -1,20 +1,28 @@
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Marathon Game</title>
-  <style>
-    body {
-      margin: 0;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started</title>
+    <style>
+        #scoreboard {
+          position: absolute;
+          top: 50px;
+          left: 10px;
+          font-family: Arial, sans-serif;
+          font-size: 24px;
+          color: black;
+        }
+      </style>
 </head>
 
 <body>
-  <div id="threejs"> </div>
-
+    <div id="scoreboard">
+        Score: <span id="score">0</span><br>
+        Hydration: <span id="hydration">0</span>
+    </div>
 </body>
 
 </html>
