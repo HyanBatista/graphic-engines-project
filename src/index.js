@@ -178,7 +178,7 @@ function addObstacleBody() {
 
 function addObstacle() {
     let geometry = new THREE.BoxGeometry(2, 2, 2);
-    const texture = new THREE.TextureLoader().load("assets/obstacle.png");
+    const texture = new THREE.TextureLoader().load("assets/water_bottle.glb");
     let material = new THREE.MeshBasicMaterial({ map: texture });
     let obstacle = new THREE.Mesh(geometry, material);
     for (let i = 0; i < 5; i++) {
