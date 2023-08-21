@@ -1,320 +1,329 @@
 import * as THREE from 'three'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
+import GUI from 'lil-gui'
+import * as CANNON from "cannon-es"
+import CannonDebugger from "cannon-es-debugger"
 
-const scene = new THREE.Scene()
-const camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-)
-camera.position.set(1, 8, 40)
+let elThreejs = document.getElementById("threejs");
+let camera, scene, renderer;
 
-const renderer = new THREE.WebGL1Renderer({
-    alpha: true,
-    antialias: true
-})
-renderer.shadowMap.enabled = true
-renderer.setSize(window.innerWidth, window.innerHeight)
-document.body.appendChild(renderer.domElement)
+// helpers to debug
+let axesHelper
+let controls
+let gui
 
-const controls = new OrbitControls(camera, renderer.domElement)
+// show and move cube
+let cubeThree
+let keyboard = {}
 
-class Box extends THREE.Mesh {
-    constructor({
-        width,
-        height,
-        depth,
-        color = '#00ff00',
-        velocity = {
-            x: 0,
-            y: 0,
-            z: 0
-        },
-        position = {
-            x: 0,
-            y: 0,
-            z: 0
-        },
-        zAcceleration = false
-    }) {
-        super(
-            new THREE.BoxGeometry(width, height, depth),
-            new THREE.MeshStandardMaterial({ color: color })
-        )
-        this.width = width
-        this.height = height
-        this.depth = depth
-        this.color = color
-        this.position.set(position.x, position.y, position.z)
-        this.bottom = this.position.y - this.height / 2
-        this.top = this.position.y + this.height / 2
-        this.right = this.position.x + this.width / 2
-        this.left = this.position.x - this.width / 2
-        this.front = this.position.z + this.depth / 2
-        this.back = this.position.z - this.depth / 2
-        this.velocity = velocity
-        this.gravity = -0.002
-        this.zAcceleration = zAcceleration
-    }
+// camera follow player
+let enableFollow;
 
-    updateSides() {
-        this.right = this.position.x + this.width / 2
-        this.left = this.position.x - this.width / 2
-        this.bottom = this.position.y - this.height / 2
-        this.top = this.position.y + this.height / 2
-        this.front = this.position.z + this.depth / 2
-        this.back = this.position.z - this.depth / 2
-    }
+// cannon variables
+let world
+let cannonDebugger
+let timeStep = 1 / 60
+let cubeBody, planeBody, obstacleBody
+let slipperyMaterial, groundMaterial
+let obstaclesBodies = []
+let obstaclesMeshes = []
 
-    update(ground) {
-        this.updateSides()
-        if (this.zAcceleration) {
-            this.velocity.z += 0.0002
-        }
-        this.position.x += this.velocity.x
-        this.position.z += this.velocity.z
-        this.applyGravity(ground)
-    }
 
-    applyGravity(ground) {
-        this.velocity.y += this.gravity
+init()
 
-        if (boxCollision({
-            box1: this,
-            box2: ground
-        })) {
-            const friction = 0.4
-            this.velocity.y *= friction
-            this.velocity.y = -this.velocity.y
-        }
-        else {
-            this.position.y += this.velocity.y
-        }
-    }
+
+async function init() {
+
+    // Scene
+    scene = new THREE.Scene();
+
+    // Camera
+    camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+    );
+    console.log(camera, "camera");
+    camera.position.z = 10;
+    camera.position.y = 5;
+
+
+    // render
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+
+    const ambient = new THREE.HemisphereLight(0xffffbb, 0x080820);
+    scene.add(ambient);
+
+    const light = new THREE.DirectionalLight(0xFFFFFF, 1);
+    light.position.set(1, 10, 6);
+    scene.add(light);
+
+    // axesHelper
+    axesHelper = new THREE.AxesHelper(100);
+    scene.add(axesHelper);
+
+    // orbitControls
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.rotateSpeed = 1.0
+    controls.zoomSpeed = 1.2
+    controls.enableDamping = true
+    controls.enablePan = false
+    controls.dampingFactor = 0.2
+    controls.minDistance = 10
+    controls.maxDistance = 500
+    controls.enabled = true
+
+    elThreejs.appendChild(renderer.domElement);
+
+    initCannon()
+
+    addBackground()
+
+    addPlaneBody();
+    addPlane();
+
+    addCubeBody();
+    await addCube();
+
+    addObstacleBody();
+    addObstacle();
+
+    addContactMaterials()
+
+    addKeysListener();
+    addGUI()
+
+    animate()
 }
 
-function boxCollision({ box1, box2 }) {
-    const xCollision = box1.right >= box2.left && box1.left <= box2.right
-    const yCollision = box1.bottom + box1.velocity.y <= box2.top && box1.top >= box2.bottom
-    const zCollision = box1.front >= box2.back && box1.back <= box2.front
-    return xCollision && yCollision && zCollision
-}
-
-function updateScoreElement(score, element) {
-    element.textContent = score
-}
-
-const player = new Box({
-    width: 1,
-    height: 1,
-    depth: 1,
-    velocity: {
-        x: 0,
-        y: -0.01,
-        z: 0
-    },
-    color: 'red'
-})
-player.castShadow = true
-scene.add(player)
-
-const ground = new Box({
-    width: 20,
-    height: 0.5,
-    depth: 50,
-    color: 'yellow',
-    position: {
-        x: 0,
-        y: -2,
-        z: 0
-    }
-})
-ground.receiveShadow = true
-scene.add(ground)
-
-const light = new THREE.DirectionalLight(0xffffff, 1)
-light.position.y = 3
-light.position.z = 1
-light.castShadow = true
-scene.add(light)
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.5))
-
-camera.position.z = 10
-
-console.log(ground.top)
-console.log(player.bottom)
-
-const keys = {
-    a: {
-        pressed: false
-    },
-    d: {
-        pressed: false
-    },
-    w: {
-        pressed: false
-    },
-    s: {
-        pressed: false
-    }
-}
-
-window.addEventListener('keydown', (event) => {
-    switch (event.code) {
-        case 'KeyA':
-            keys.a.pressed = true
-            break
-        case 'KeyD':
-            keys.d.pressed = true
-            break
-        case 'KeyS':
-            keys.s.pressed = true
-            break
-        case 'KeyW':
-            keys.w.pressed = true
-            break
-        case 'Space':
-            player.velocity.y = 0.08
-            break
-    }
-}) 
-
-window.addEventListener('keyup', (event) => {
-    switch (event.code) {
-        case 'KeyA':
-            keys.a.pressed = false
-            break
-        case 'KeyD':
-            keys.d.pressed = false
-            break
-        case 'KeyS':
-            keys.s.pressed = false
-            break
-        case 'KeyW':
-            keys.w.pressed = false
-            break
-    }
-})
-
-const snakes = []
-const waters = []
-
-const scoreElement = document.getElementById('score')
-const hydrationElement = document.getElementById('hydration')
-
-let frames = 0
-let spawnRate = 400
-let waterSpawnRate = 600
-let thirstRate = 350
-let hydration = 100
 function animate() {
-    const animationId = requestAnimationFrame(animate)
-    renderer.render(scene, camera)
-
-    player.velocity.x = 0
-    player.velocity.z = 0
-    if (keys.a.pressed) {
-        player.velocity.x = -0.04
-    } else if (keys.d.pressed) {
-        player.velocity.x = 0.04
+    renderer.render(scene, camera);
+    movePlayer()
+    if (enableFollow) {
+        followPlayer()
     }
-    if (keys.w.pressed) {
-        player.velocity.z = -0.04
-    } else if (keys.s.pressed) {
-        player.velocity.z = 0.04
-    }
+    world.step(timeStep)
+    cannonDebugger.update()
 
-    player.update(ground)
-    snakes.forEach(snake => {
-        snake.update(ground)
-        if (boxCollision({
-            box1: player,
-            box2: snake
-        })) {
-            cancelAnimationFrame(animationId)
-        }
-    })
+    cubeThree.position.copy(cubeBody.position);
+    cubeThree.position.y = cubeBody.position.y - 1.3;
+    cubeThree.quaternion.copy(cubeBody.quaternion);
 
-    if (frames % thirstRate === 0) {
-        hydration += -10
-        if (hydration <= 0) {
-            cancelAnimationFrame(animationId)
-        }
+    for (let i = 0; i < obstaclesBodies.length; i++) {
+        obstaclesMeshes[i].position.copy(obstaclesBodies[i].position);
+        obstaclesMeshes[i].quaternion.copy(obstaclesBodies[i].quaternion);
     }
 
-    waters.forEach((water, index) => {
-        water.update(ground)
-        if (boxCollision({
-            box1: player,
-            box2: water
-        })) {
-            waters.splice(index, 1)
-            let newHydrationValue = hydration + 20
-            if (newHydrationValue > 100) {
-                newHydrationValue = 100
-            }
-            hydration = newHydrationValue
-            scene.remove(water)
-        }
-    })
+    requestAnimationFrame(animate);
+}
 
-    if (frames % spawnRate === 0) {
-        if (spawnRate > 20) {
-            spawnRate -= 5
-        }
-        const snake = new Box({
-            width: 1,
-            height: 1,
-            depth: 1,
-            velocity: {
-                x: 0,
-                y: 0,
-                z: 0.005
-            },
-            position: {
-                x: (Math.random() - 0.5) * 15,
-                y: 0,
-                z: -20
-            },
-            color: 'green',
-            zAcceleration: true
-        })
-        snake.castShadow = true
-        scene.add(snake)
-        snakes.push(snake)
-    }
 
-    if (frames % waterSpawnRate === 0) {
+function addCubeBody() {
+    let cubeShape = new CANNON.Box(new CANNON.Vec3(1, 1.3, 2));
+    slipperyMaterial = new CANNON.Material('slippery');
+    cubeBody = new CANNON.Body({ mass: 100, material: slipperyMaterial });
+    cubeBody.addShape(cubeShape, new CANNON.Vec3(0, 0, -1));
+    const polyhedronShape = createCustomShape()
+    cubeBody.addShape(polyhedronShape, new CANNON.Vec3(-1, -1.3, 1));
+    cubeBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI / 180 * 180);
+    cubeBody.position.set(0, 2, 0);
+    cubeBody.linearDamping = 0.5;
+    world.addBody(cubeBody);
+}
 
-        const water = new Box({
-            width: 1,
-            height: 1,
-            depth: 1,
-            velocity: {
-                x: 0,
-                y: 0,
-                z: 0.005
-            },
-            position: {
-                x: (Math.random() - 0.5) * 15,
-                y: 0,
-                z: -20
-            },
-            color: 'blue',
-            zAcceleration: true
-        })
-        water.castShadow = true
-        scene.add(water)
-        waters.push(water)
-    }
-    
-    frames++
-    if (frames % 20 === 0) {
-        updateScoreElement(frames, scoreElement)
-        updateScoreElement(hydration, hydrationElement)
+
+async function addCube() {
+    const gltfLoader = new GLTFLoader();
+    const carLoaddedd = await gltfLoader.loadAsync('assets/car.glb');
+    cubeThree = carLoaddedd.scene.children[0];
+    scene.add(cubeThree);
+}
+
+function addPlaneBody() {
+    groundMaterial = new CANNON.Material('ground')
+    const planeShape = new CANNON.Box(new CANNON.Vec3(10, 0.01, 100));
+    planeBody = new CANNON.Body({ mass: 0, material: groundMaterial });
+    planeBody.addShape(planeShape);
+    planeBody.position.set(0, 0, -90);
+    world.addBody(planeBody);
+}
+
+
+function addPlane() {
+    const texture = new THREE.TextureLoader().load("assets/plane.png");
+    let geometry = new THREE.BoxGeometry(20, 0, 200);
+    let material = new THREE.MeshBasicMaterial({ map: texture });
+    let planeThree = new THREE.Mesh(geometry, material);
+    planeThree.position.set(0, 0, -90);
+    scene.add(planeThree);
+}
+
+
+function addObstacleBody() {
+    for (let i = 0; i < 5; i++) {
+        let obstacleShape = new CANNON.Box(new CANNON.Vec3(1, 1, 1));
+        obstacleBody = new CANNON.Body({ mass: 1 });
+        obstacleBody.addShape(obstacleShape);
+        obstacleBody.position.set(0, 5, -(i + 1) * 15);
+        world.addBody(obstacleBody);
+        obstaclesBodies.push(obstacleBody);
     }
 }
 
-animate()
+
+function addObstacle() {
+    let geometry = new THREE.BoxGeometry(2, 2, 2);
+    const texture = new THREE.TextureLoader().load("assets/obstacle.png");
+    let material = new THREE.MeshBasicMaterial({ map: texture });
+    let obstacle = new THREE.Mesh(geometry, material);
+    for (let i = 0; i < 5; i++) {
+        let obstacleMesh = obstacle.clone();
+        scene.add(obstacleMesh);
+        obstaclesMeshes.push(obstacleMesh);
+    }
+}
+
+
+function addContactMaterials() {
+    const slippery_ground = new CANNON.ContactMaterial(groundMaterial, slipperyMaterial, {
+        friction: 0.0001,
+        restitution: 0.3,
+        contactEquationStiffness: 1e8,
+        contactEquationRelaxation: 3,
+    })
+
+    world.addContactMaterial(slippery_ground)
+
+}
+
+
+function addKeysListener() {
+    window.addEventListener('keydown', function (event) {
+        keyboard[event.code] = true;
+    }, false);
+    window.addEventListener('keyup', function (event) {
+        keyboard[event.code] = false;
+    }, false);
+}
+
+function movePlayer() {
+    const strengthWS = 200;
+    const forceForward = new CANNON.Vec3(0, 0, strengthWS)
+    const forceBack = new CANNON.Vec3(0, 0, -strengthWS)
+
+    const strengthAD = 200;
+    const forceLeft = new CANNON.Vec3(strengthAD, 0, 0)
+    const forceRigth = new CANNON.Vec3(-strengthAD, 0, 0)
+
+
+    // up letter W
+    if (keyboard['KeyW']) {
+        cubeBody.applyLocalForce(forceForward)
+    }
+
+    // down letter S
+    if (keyboard['KeyS']) {
+        cubeBody.applyLocalForce(forceBack)
+    }
+
+    // left letter A
+    if (keyboard['KeyA']) {
+        cubeBody.applyLocalForce(forceLeft)
+    }
+
+    // right letter D
+    if (keyboard['KeyD']) {
+        cubeBody.applyLocalForce(forceRigth)
+    }
+}
+
+
+function followPlayer() {
+    camera.position.x = cubeThree.position.x;
+    camera.position.y = cubeThree.position.y + 5;
+    camera.position.z = cubeThree.position.z + 10;
+}
+
+
+function addGUI() {
+    gui = new GUI();
+
+    const options = {
+        orbitsControls: true
+    }
+
+    gui.add(options, 'orbitsControls').onChange(value => {
+        if (value) {
+            controls.enabled = true;
+            enableFollow = false;
+        } else {
+            controls.enabled = false;
+            enableFollow = true;
+        }
+    });
+}
+
+function initCannon() {
+    // Setup world
+    world = new CANNON.World();
+    world.gravity.set(0, -9.8, 0);
+
+    initCannonDebugger();
+}
+
+function initCannonDebugger() {
+    cannonDebugger = new CannonDebugger(scene, world, {
+        onInit(body, mesh) {
+            document.addEventListener("keydown", (event) => {
+                if (event.code === "KeyF") {
+                    mesh.visible = !mesh.visible;
+                }
+            });
+        },
+    });
+}
+
+function createCustomShape() {
+    const vertices = [
+        new CANNON.Vec3(2, 0, 0),
+        new CANNON.Vec3(2, 0, 2),
+        new CANNON.Vec3(2, 2, 0),
+        new CANNON.Vec3(0, 0, 0),
+        new CANNON.Vec3(0, 0, 2),
+        new CANNON.Vec3(0, 2, 0),
+    ]
+
+    return new CANNON.ConvexPolyhedron({
+        vertices,
+        faces: [
+            [3, 4, 5],
+            [2, 1, 0],
+            [1, 2, 5, 4],
+            [0, 3, 4, 1],
+            [0, 2, 5, 3],
+        ]
+    })
+}
+
+async function addBackground() {
+    const gltfLoader = new GLTFLoader()
+
+    const mountainLoaded = await gltfLoader.loadAsync('assets/mountain.glb');
+    let mountainMesh = mountainLoaded.scene.children[0];
+    mountainMesh.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -Math.PI / 180 * 90);
+    mountainMesh.position.set(0, 60, -90);
+    mountainMesh.scale.set(0.008, 0.008, 0.008);
+    scene.add(mountainMesh);
+
+    const domeLoaded = await gltfLoader.loadAsync('assets/skydome.glb');
+    let domeMesh = domeLoaded.scene.children[0];
+    domeMesh.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -Math.PI / 180 * 90);
+    domeMesh.position.set(0, -40, 0);
+    domeMesh.scale.set(0.1, 0.1, 0.1);
+    scene.add(domeMesh);
+}

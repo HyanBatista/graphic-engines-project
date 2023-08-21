@@ -12,6 +12,7 @@
   "author": "Hyan Batista",
   "license": "ISC",
   "dependencies": {
+    "cannon-es": "^0.20.0",
     "copy-webpack-plugin": "^11.0.0",
     "html-webpack-plugin": "^5.5.3",
     "three": "^0.153.0",
@@ -19,6 +20,8 @@
     "webpack-cli": "^5.1.4"
   },
   "devDependencies": {
+    "cannon-es-debugger": "^1.0.0",
+    "lil-gui": "^0.18.2",
     "webpack-dev-server": "^4.15.1"
   }
 }
