@@ -5,7 +5,7 @@ import * as CANNON from "cannon-es"
 import CannonDebugger from "cannon-es-debugger"
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-let camera, scene, renderer;
+let camera, xRCamera, scene, renderer;
 
 // Game settings
 let frames = 0
@@ -17,7 +17,7 @@ let hydration = 100
 // Game variables
 let ground
 let player
-const snakes = []
+const wolves = []
 const waters = []
 let keyboard = {}
 
@@ -206,6 +206,19 @@ async function init() {
     renderer.shadowMap.enabled = true
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.xr.enabled = true;
+    renderer.xr.addEventListener('sessionstart', () => {
+        controls.update();
+        const baseReferenceSpace = renderer.xr.getReferenceSpace();
+        player.rotateX(90)
+        player.rotateZ(91.1)
+        player.position.y = 0.4
+        const offsetPosition = player.position;
+        const offsetRotation = player.quaternion;
+        const transform = new XRRigidTransform(offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y), z: offsetRotation.z, w: offsetRotation.w });
+        const teleportSpaceOffset = baseReferenceSpace.getOffsetReferenceSpace(transform);
+        renderer.xr.setReferenceSpace(teleportSpaceOffset);
+    })
+
 
     const ambient = new THREE.HemisphereLight(0xffffbb, 0x080820);
     scene.add(ambient);
@@ -215,7 +228,7 @@ async function init() {
     scene.add(light);
 
     document.body.appendChild(renderer.domElement)
-    document.body.appendChild( VRButton.createButton( renderer ) );
+    document.body.appendChild(VRButton.createButton(renderer));
 
     const controls = new OrbitControls(camera, renderer.domElement)
 
@@ -226,8 +239,7 @@ async function init() {
 
     addKeysListener()
 
-    // renderer.setAnimationLoop(animate)
-    await animate()
+    renderer.setAnimationLoop(animate)
 }
 
 
@@ -258,6 +270,7 @@ function addPlayer() {
         color: 'red'
     })
     player.object.rotation.z = 9.4
+    player.object.attach(camera)
     player.castShadow = true
     scene.add(player.object)
 }
@@ -345,55 +358,54 @@ function movePlayer() {
     }
 }
 
+
 async function animate() {
-    const animationId = requestAnimationFrame(animate)
     renderer.render(scene, camera)
-
     movePlayer()
-
     player.update(ground)
-    snakes.forEach(snake => {
-        snake.update(ground)
+    endGameByDehydration()
+    udpateWolves()
+    updateWaters()
+    spawnWolves()
+    spawnWaters()
+    updatePainel()
+    frames++
+}
+
+
+function udpateWolves() {
+    wolves.forEach(wolf => {
+        wolf.update(ground)
         if (boxCollision({
             box1: player,
-            box2: snake
+            box2: wolf
         })) {
-            cancelAnimationFrame(animationId)
+            renderer.setAnimationLoop(null)
         }
     })
+}
 
+
+function endGameByDehydration() {
     if (frames % thirstRate === 0) {
         hydration += -10
         if (hydration <= 0) {
-            cancelAnimationFrame(animationId)
+            renderer.setAnimationLoop(null)
         }
     }
+}
 
-    waters.forEach((water, index) => {
-        water.update(ground)
-        if (boxCollision({
-            box1: player,
-            box2: water
-        })) {
-            waters.splice(index, 1)
-            let newHydrationValue = hydration + 20
-            if (newHydrationValue > 100) {
-                newHydrationValue = 100
-            }
-            hydration = newHydrationValue
-            scene.remove(water.object)
-        }
-    })
 
+function spawnWolves() {
     if (frames % spawnRate === 0) {
         if (spawnRate > 20) {
             spawnRate -= 5
         }
 
-        let snake_object = wolfThree.clone()
+        let wolf_object = wolfThree.clone()
 
-        const snake = new Object3DBox({
-            object: snake_object,
+        const wolf = new Object3DBox({
+            object: wolf_object,
             width: 1,
             height: 1,
             depth: 1,
@@ -410,12 +422,33 @@ async function animate() {
             color: 'green',
             zAcceleration: true
         })
-        snake.castShadow = true
-        snake.object.position.copy(snake.position)
-        scene.add(snake.object)
-        snakes.push(snake)
+        wolf.castShadow = true
+        wolf.object.position.copy(wolf.position)
+        scene.add(wolf.object)
+        wolves.push(wolf)
     }
+}
 
+
+function updateWaters() {
+    waters.forEach((water, index) => {
+        water.update(ground)
+        if (boxCollision({
+            box1: player,
+            box2: water
+        })) {
+            waters.splice(index, 1)
+            let newHydrationValue = hydration + 20
+            if (newHydrationValue > 100) {
+                newHydrationValue = 100
+            }
+            hydration = newHydrationValue
+            scene.remove(water.object)
+        }
+    })
+}
+
+function spawnWaters() {
     if (frames % waterSpawnRate === 0) {
 
         const water = new Object3DBox({
@@ -440,12 +473,20 @@ async function animate() {
         scene.add(water.object)
         waters.push(water)
     }
+}
 
-    frames++
+
+function updatePainel() {
     if (frames % 20 === 0) {
         updateScoreElement(frames, scoreElement)
         updateScoreElement(hydration, hydrationElement)
     }
+}
+
+async function animate_() {
+
+    frames++
+
 }
 
 
