@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
 import * as CANNON from "cannon-es"
 import CannonDebugger from "cannon-es-debugger"
+import { VRButton } from 'three/addons/webxr/VRButton.js';
 
 let camera, scene, renderer;
 
@@ -27,7 +28,8 @@ const hydrationElement = document.getElementById('hydration')
 // Game 3D Objects
 let wolfThree = await createWolf()
 let waterThree = await createWater()
-
+let playerThree = await createPlayer()
+let groundThree = createGround()
 
 class Box extends THREE.Mesh {
     constructor({
@@ -197,12 +199,13 @@ async function init() {
     camera.position.y = 5;
 
 
-    renderer = new THREE.WebGL1Renderer({
+    renderer = new THREE.WebGLRenderer({
         alpha: true,
         antialias: true
     })
     renderer.shadowMap.enabled = true
     renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.xr.enabled = true;
 
     const ambient = new THREE.HemisphereLight(0xffffbb, 0x080820);
     scene.add(ambient);
@@ -212,6 +215,7 @@ async function init() {
     scene.add(light);
 
     document.body.appendChild(renderer.domElement)
+    document.body.appendChild( VRButton.createButton( renderer ) );
 
     const controls = new OrbitControls(camera, renderer.domElement)
 
@@ -222,6 +226,7 @@ async function init() {
 
     addKeysListener()
 
+    // renderer.setAnimationLoop(animate)
     await animate()
 }
 
@@ -240,7 +245,8 @@ function updateScoreElement(score, element) {
 
 
 function addPlayer() {
-    player = new Box({
+    player = new Object3DBox({
+        object: playerThree,
         width: 1,
         height: 1,
         depth: 1,
@@ -251,13 +257,15 @@ function addPlayer() {
         },
         color: 'red'
     })
+    player.object.rotation.z = 9.4
     player.castShadow = true
-    scene.add(player)
+    scene.add(player.object)
 }
 
 
 function addGround() {
-    ground = new Box({
+    ground = new Object3DBox({
+        object: groundThree,
         width: 20,
         height: 0.5,
         depth: 50,
@@ -268,8 +276,9 @@ function addGround() {
             z: 0
         }
     })
+    ground.object.position.copy(ground.position)
     ground.receiveShadow = true
-    scene.add(ground)
+    scene.add(ground.object)
 }
 
 
@@ -288,6 +297,23 @@ async function createWolf() {
     let wolfThree = wolfLoaded.scene.children[0];
     wolfThree.scale.set(0.15, 0.15, 0.15)
     return wolfThree
+}
+
+async function createPlayer() {
+    const gltfLoader = new GLTFLoader();
+    const playerLoaded = await gltfLoader.loadAsync('assets/sonic.glb');
+    let playerThree = playerLoaded.scene.children[0];
+    playerThree.scale.set(1.5, 1.5, 1.5)
+    return playerThree
+}
+
+
+function createGround() {
+    const texture = new THREE.TextureLoader().load("assets/plane.png");
+    let geometry = new THREE.BoxGeometry(20, 0, 200);
+    let material = new THREE.MeshBasicMaterial({ map: texture });
+    let groundThree = new THREE.Mesh(geometry, material);
+    return groundThree
 }
 
 
