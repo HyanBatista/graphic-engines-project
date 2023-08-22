@@ -24,6 +24,10 @@ let keyboard = {}
 const scoreElement = document.getElementById('score')
 const hydrationElement = document.getElementById('hydration')
 
+// Game 3D Objects
+let wolfThree = await createWolf()
+let waterThree = await createWater()
+
 
 class Box extends THREE.Mesh {
     constructor({
@@ -154,8 +158,8 @@ class Object3DBox extends THREE.Mesh {
         if (this.zAcceleration) {
             this.velocity.z += 0.0002
         }
-        this.object.position.copy(this.position)
         this.position.x += this.velocity.x
+        this.object.position.copy(this.position)
         this.position.z += this.velocity.z
         this.applyGravity(ground)
     }
@@ -278,12 +282,12 @@ async function createWater() {
 }
 
 
-async function createCobra() {
+async function createWolf() {
     const gltfLoader = new GLTFLoader();
-    const cobraLoaded = await gltfLoader.loadAsync('assets/scorpion.glb');
-    let cobraThree = cobraLoaded.scene.children[0];
-    cobraThree.scale.set(6, 6, 6)
-    return cobraThree
+    const wolfLoaded = await gltfLoader.loadAsync('assets/fantasy_wolf.glb');
+    let wolfThree = wolfLoaded.scene.children[0];
+    wolfThree.scale.set(0.15, 0.15, 0.15)
+    return wolfThree
 }
 
 
@@ -314,7 +318,6 @@ function movePlayer() {
         player.velocity.x = -0.04
     }
 }
-
 
 async function animate() {
     const animationId = requestAnimationFrame(animate)
@@ -361,9 +364,9 @@ async function animate() {
             spawnRate -= 5
         }
 
-        let snake_object = await createCobra()
+        let snake_object = wolfThree.clone()
 
-        const snake = new Box({
+        const snake = new Object3DBox({
             object: snake_object,
             width: 1,
             height: 1,
@@ -382,16 +385,15 @@ async function animate() {
             zAcceleration: true
         })
         snake.castShadow = true
+        snake.object.position.copy(snake.position)
         scene.add(snake.object)
         snakes.push(snake)
     }
 
     if (frames % waterSpawnRate === 0) {
 
-        let water_object3d = await createWater()
-
         const water = new Object3DBox({
-            object: water_object3d,
+            object: waterThree,
             width: 1,
             height: 1,
             depth: 1,
